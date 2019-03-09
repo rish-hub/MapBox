@@ -1,5 +1,5 @@
 import React, { Component } from 'react';
-import MapGL, {Marker}  from 'react-map-gl';
+import MapGL  from 'mapbox-gl';
 import Pin from './Pins'
 
 export default class Map extends Component{
@@ -7,12 +7,12 @@ export default class Map extends Component{
         super(props)
         this.state={
             api_url:'https://data.edmonton.ca/resource/87ck-293k.json',
+            map:false,
             viewport :{
-                width: 1000,
-                height:600,
                 zoom: 10,
                 latitude:53.5457,
-                longitude:-113.4947
+                longitude:-113.4947,
+                center:[-113.4999, 53.5444]
             },  
             cordes:[
                 { latitude:18.5616,  longitude:73.8069},
@@ -23,32 +23,75 @@ export default class Map extends Component{
             data:null                        
         }
     }
-componentDidMount() {
+    initializeMap(){
+        MapGL.accessToken = process.env.REACT_APP_MAPBOX_TOKEN
+        let map = new MapGL.Map({
+            container:'map',
+            style:'mapbox://styles/mapbox/light-v9',
+            ...this.state.viewport
+        }); 
+            map.on("load",()=>{
+                map.addLayer({
+                    "id":"points",
+                    "type":"circle",
+                    "source":{
+                        "type":"geojson",
+                        "data":this.state.data
+                    },
+                    "point":{
+                        "circle-radius":5,
+                        "circle-color":"#B4D455"
+                    }
+                    
+                })
+            })
+        map.on('click','points',(e)=>{
+                const coordinates = e.features[0].geometry.coordinates.slice();
+                const {details, description, impact, duration} = e.features[0].properties;
+        })
+         this.setState({map})
+    }
+
+    createFeatureCollection(res){
+    let features  = [];
+    res.forEach(point => {
+        features.push({
+            "type":"Feature",
+            "geometry":{
+                "type": "Point",
+                "coordinates":[
+                    parseFloat(point.location.longitude),
+                    parseFloat(point.location.latitude),
+                ]
+            },
+            "properties":{
+                "description":point.description,
+                "details":point.details,
+                "duration":point.duration,
+                "impact":point.impact
+            }
+        })
+    });  
+    return {
+        "type":"FeatureCollection",
+        "features":features
+    }
+    }    
+    
+    componentDidMount() {
     const {data, api_url} = this.state;
     if(!data){
         fetch(api_url, {method:'GET'})
         .then(response=>response.json())
+        .then(res=> this.createFeatureCollection(res))
         .then(res=>this.setState({data:res}))
     }
 }
 render(){
-    const {cordes,data}  = this.state;
+    const {data,map}  = this.state;
+    if(data && !map) this.initializeMap();
     return( 
-        <MapGL
-        mapboxApiAccessToken={process.env.REACT_APP_MAPBOX_TOKEN}
-        {...this.state.viewport}
-        onViewportChange={(viewport) => this.setState({viewport})}
-      >      
-       {data && data.map((corde,i)=>
-           <Marker key={`Marker-${i * (Math.random() * 200 +1)}`}
-           latitude={parseFloat(corde.location.latitude)}
-           longitude={parseFloat(corde.location.longitude)} >
-            <Pin/>
-           </Marker>
-       )}
-      </MapGL>
-     
-       
+     <div style={{width:1100, height:600}} id="map"/>              
     )
 }
 
